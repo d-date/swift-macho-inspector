@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    container: swift:6.4-noble
+    steps:
+      - uses: actions/checkout@v7
+      - run: swift format lint --strict --recursive --parallel Package.swift Sources Tests
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        swift: ["6.3", "6.4"]
+    container: swift:${{ matrix.swift }}-noble
+    steps:
+      - uses: actions/checkout@v7
+      # Hash before building: the cache post step re-evaluates the key.
+      - id: cache-key
+        run: echo "hash=${{ hashFiles('Package.swift', 'Package.resolved') }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: .build
+          key: swiftpm-${{ matrix.swift }}-${{ steps.cache-key.outputs.hash }}
+          restore-keys: swiftpm-${{ matrix.swift }}-
+      - run: swift test
